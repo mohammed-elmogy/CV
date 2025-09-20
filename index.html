@@ -24,26 +24,75 @@
     #add-project input, #add-project textarea { display:block; width: 90%; margin: 10px auto; padding: 10px; border-radius: 5px; border: 1px solid #ccc; }
     @media (max-width: 768px) { body { flex-direction: column; } .sidebar { position: relative; width: 100%; height: auto; flex-direction: row; justify-content: space-around; } .sidebar img { display: none; } .sidebar h2 { display: none; } .content { margin-left: 0; width: 100%; padding: 15px; } }
     @media (max-width: 480px) { .project-list { grid-template-columns: 1fr; } }
+    #edit{ display:none; padding:20px; background:#eee; width:100%; min-height:100vh; }
+    #login-box{padding:20px; background:#eee;display: none;}
   </style>
 
   <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+
   <script>
+    // إعداد Firebase
     const firebaseConfig = {
-  apiKey: "AIzaSyAAkv2yTZt0krxBcMio1o6je9MGjWZq_84",
-  authDomain: "portfoiluo.firebaseapp.com",
-  databaseURL: "https://portfoiluo-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "portfoiluo",
-  storageBucket: "portfoiluo.firebasestorage.app",
-  messagingSenderId: "273679929614",
-  appId: "1:273679929614:web:d814f9505dfcfd331c075f",
-  measurementId: "G-JBETZWF927"
-};
+      apiKey: "AIzaSyAAkv2yTZt0krxBcMio1o6je9MGjWZq_84",
+      authDomain: "portfoiluo.firebaseapp.com",
+      databaseURL: "https://portfoiluo-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "portfoiluo",
+      storageBucket: "portfoiluo.appspot.com",
+      messagingSenderId: "273679929614",
+      appId: "1:273679929614:web:d814f9505dfcfd331c075f",
+      measurementId: "G-JBETZWF927"
+    };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
+    const auth = firebase.auth();
 
-    // تنقل بين الأقسام
+    // الإيميل الوحيد المسموح يضيف/يحذف
+    const adminEmail = "jakjak200018@gmail.com";
+
+    // تسجيل الدخول بجوجل
+    function loginGoogle(){
+      const provider = new firebase.auth.GoogleAuthProvider();
+      auth.signInWithPopup(provider)
+      .then(result => {
+        const user = result.user;
+        if(user.email === adminEmail){
+          alert("Welcome Admin ✅");
+          document.getElementById("login-box").style.display="none";
+          document.getElementById("main").style.display="block";
+        }else{
+          alert("You are not authorized ❌");
+          auth.signOut();
+        }
+      })
+      .catch(err => alert(err.message));
+    }
+
+    // عرض المشاريع
+    function renderProjects(){
+      const container = document.querySelector(".project-list");
+      container.innerHTML = "";
+      db.ref("projects").on("value", snapshot => {
+        container.innerHTML = "";
+        let i = 1;
+        snapshot.forEach(child => {
+          let proj = child.val();
+          let div = document.createElement("div");
+          div.className = "project-item";
+          div.innerHTML = `
+            <h3>${i}. ${proj.name}</h3>
+            <p>${proj.description}</p>
+            <a href="${proj.link}" target="_blank">View</a>
+          `;
+          container.appendChild(div);
+          i++;
+        });
+      });
+    }
+
+    // التنقل بين الأقسام
     window.onload = function() {
       const links = document.querySelectorAll('.nav-link');
       let active = { link: document.querySelector('.nav-link.active'), section: document.querySelector('section.active') };
@@ -61,60 +110,48 @@
       renderProjects();
     };
 
-    // عرض المشاريع من Firebase
-    function renderProjects(){
-      const container = document.querySelector(".project-list");
-      container.innerHTML = "";
-      firebase.database().ref("projects").on("value", snapshot => {
-        container.innerHTML = "";
-        let i = 1;
-        snapshot.forEach(child => {
-          let proj = child.val();
-          let key = child.key;
-          let div = document.createElement("div");
-          div.className = "project-item";
-          div.innerHTML = `
-            <h3>${i}. ${proj.name}</h3>
-            <p>${proj.description}</p>
-            <a href="${proj.link}" target="_blank">View</a>
-          `;
-          container.appendChild(div);
-          i++;
-        });
-      });
-    }
-
-    // عمليات الكيبورد
+    // عمليات الكيبورد (add / save / delete)
     var operation = "";
     document.addEventListener("keydown",function(e){
       operation += e.key;
 
-      // add
       if(operation.includes("add")){
-        document.getElementById("main").style.display="none";
-        document.getElementById("add-project").style.display="block";
+        
+        if(auth.currentUser && auth.currentUser.email === adminEmail){
+          document.getElementById("main").style.display="none";
+          document.getElementById("add-project").style.display="block";
+        } else {
+          alert("Not Authorized ❌");
+        }
+        operation="";
+      }else if(operation.includes("log")){
+        loginGoogle();
         operation="";
       }
-
-      // save
       else if(operation.includes("save")){
-        let name = document.getElementById("project-name").value;
-        let description = document.getElementById("project-description").value;
-        let link = document.getElementById("project-link").value;
-        if(name && description && link){
-          firebase.database().ref("projects").push({name, description, link});
-          alert("Saved ✅");
-          location.reload();
+        if(auth.currentUser && auth.currentUser.email === adminEmail){
+          let name = document.getElementById("project-name").value;
+          let description = document.getElementById("project-description").value;
+          let link = document.getElementById("project-link").value;
+          if(name && description && link){
+            db.ref("projects").push({name, description, link});
+            alert("Saved ✅");
+            location.reload();
+          }
+        } else {
+          alert("Not Authorized ❌");
         }
         operation="";
       }
-
-      // delete
       else if(operation.includes("delete")){
-        let id = prompt("Enter Firebase project ID to delete:");
-        if(id){
-          firebase.database().ref("projects/"+id).remove();
-          alert("Deleted ❌");
+        if(auth.currentUser && auth.currentUser.email === adminEmail){
+          let id = prompt("Enter Firebase project ID to delete:");
+          if(id){
+            db.ref("projects/"+id).remove();
+            alert("Deleted ❌");
+          }
+        } else {
+          alert("Not Authorized ❌");
         }
         operation="";
       }
@@ -122,7 +159,14 @@
   </script>
 </head>
 <body>
-  <div id="main">
+  <!-- شاشة تسجيل الدخول -->
+  <div id="login-box">
+    <h2>Login</h2>
+    <button onclick="loginGoogle()">Login with Google</button>
+  </div>
+
+  <!-- المحتوى الأساسي -->
+  <div id="main" >
     <div class="sidebar">
       <h2>Portfolio</h2>
       <img src="l.jpg" alt="Mohammed Elmouge">
@@ -164,10 +208,18 @@
     </div>
   </div>
 
+  <!-- إضافة مشروع -->
   <div id="add-project">
     <input type="text" id="project-name" placeholder="Project Name">
     <textarea id="project-description" placeholder="Project Description"></textarea>
     <input type="url" id="project-link" placeholder="Project Link">
+  </div>
+
+  <!-- تعديل -->
+  <div id="edit">
+    <h1 id="Name-section"></h1>
+    <div id="element-of-section"></div>
+    <button>Save</button>
   </div>
 </body>
 </html>
